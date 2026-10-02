@@ -1,0 +1,14 @@
+package tests;
+
+use ecosystem::ignore;
+use std::testing;
+
+#[test]
+fn repeated_glob_matching_keeps_rows_independent_downstream() -> () {
+    let glob = testing::expect_ok(ignore::Glob::new("src/**/[ab]*.goml"), "glob");
+    for _ in 0..5 {
+        testing::assert(testing::expect_ok(glob.is_match("src/a.goml"), "root file"));
+        testing::assert(testing::expect_ok(glob.is_match("src/nested/beta.goml"), "nested"));
+        testing::assert(!testing::expect_ok(glob.is_match("src/nested/c.goml"), "excluded"));
+    }
+}

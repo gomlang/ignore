@@ -1,0 +1,54 @@
+package tests;
+
+use ecosystem::ignore;
+use std::testing;
+
+#[test]
+fn long_patterns_remain_reusable_across_different_paths() -> () {
+    let mut pattern = "";
+    let mut path = "";
+    for _ in 0..64 {
+        pattern += "a*";
+        path += "a";
+    }
+    let glob = testing::expect_ok(ignore::Glob::new(pattern), "long");
+    for _ in 0..5 {
+        testing::assert(testing::expect_ok(glob.is_match(path), "long match"));
+        testing::assert(!testing::expect_ok(glob.is_match("a"), "short mismatch"));
+        testing::assert(!testing::expect_ok(glob.is_match(path + "/a"), "separator"));
+    }
+}
+
+#[test]
+fn reused_rows_preserve_empty_recursive_and_class_states() -> () {
+    for (pattern, path, matched) in Vec::from_array(
+        [
+            ("", "", true),
+            ("", "a", false),
+            ("*", "", true),
+            ("a/**/b", "a/b", true),
+            ("a/**/b", "a/x/y/b", true),
+            ("**/a?", "x/ab", true),
+            ("[!x]*x", "abx", true),
+            ("[!x]*x", "xx", false),
+            ("a*b*c", "axbyc", true),
+            ("a*b*c", "ab/c", false),
+        ],
+    ) {
+        let glob = testing::expect_ok(ignore::Glob::new(pattern), "glob");
+        for _ in 0..3 {
+            testing::assert_eq(testing::expect_ok(glob.is_match(path), "match"), matched);
+        }
+    }
+    let limits = ignore::Limits { max_match_steps: 5, ..ignore::Limits::standard() };
+    let glob = testing::expect_ok(ignore::Glob::with_options("ab", limits, false), "limited glob");
+    testing::assert_eq(
+        testing::expect_err(glob.is_match("ab"), "six charged cells").kind,
+        ignore::ErrorKind::Limit,
+    );
+    let glob = testing::expect_ok(
+        ignore::Glob::with_options("ab", ignore::Limits { max_match_steps: 6, ..limits }, false),
+        "exact budget",
+    );
+    testing::assert(testing::expect_ok(glob.is_match("ab"), "six cells fit"));
+}
