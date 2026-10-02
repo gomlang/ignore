@@ -1,6 +1,6 @@
 package tests;
 
-use consumer::ignore;
+use ecosystem::ignore::examples::basic as ignore;
 
 #[test]
 fn exported_registry_api() -> () {

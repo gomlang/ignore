@@ -69,6 +69,18 @@ From the repository root:
 (cd ../verification && just ecosystem-test ignore)
 ```
 
-The suite covers matching, rule explanations and precedence, path validation, aliases, worktree metadata, symlink loops, malformed or oversized sources, deterministic traversal, cancellation, resource bounds, immutable concurrent matching, and bounded parallel callbacks. The independent versioned consumer exercises the exported API. Native consumer tests compare 200 rule hierarchies and 9,400 path queries with retained expected results from isolated real Git repositories, including explicit trailing-slash queries and directory traversal. [Fixture provenance](consumer/tests/data/README.md) records the Git command and seed. The native verifier runs library and consumer tests under Go's race detector. CI integration is intentionally left to the parent project.
+The suite covers matching, rule explanations and precedence, path validation, aliases, worktree metadata, symlink loops, malformed or oversized sources, deterministic traversal, cancellation, resource bounds, immutable concurrent matching, and bounded parallel callbacks. The example exercises the exported API; `goml verify` repeats its checks across the downstream dependency boundary. Native example tests compare 200 rule hierarchies and 9,400 path queries with retained expected results from isolated real Git repositories, including explicit trailing-slash queries and directory traversal. [Fixture provenance](examples/basic/tests/data/README.md) records the Git command and seed. The native verifier runs library and example tests under Go's race detector. CI integration is intentionally left to the parent project.
 
-Git semantics are based on the [Gitignore documentation](https://git-scm.com/docs/gitignore), [repository layout](https://git-scm.com/docs/gitrepository-layout), and [git check-ignore](https://git-scm.com/docs/git-check-ignore). The JSON consumer's directory requests append a slash to reproduce the exact paths used by the Git oracle.
+Git semantics are based on the [Gitignore documentation](https://git-scm.com/docs/gitignore), [repository layout](https://git-scm.com/docs/gitrepository-layout), and [git check-ignore](https://git-scm.com/docs/git-check-ignore). The JSON example's directory requests append a slash to reproduce the exact paths used by the Git oracle.
+
+## Development and examples
+
+Requires GoML 0.1.55 or newer. The `examples/basic/` example shares the root manifest; test-only helpers are declared in `[dev-dependencies]`. From the library root, run:
+
+```sh
+goml run --example basic
+goml test
+goml verify --timeout 300s
+```
+
+`goml test` builds the example and runs its tests. `goml verify` repeats the example checks as an independent module against an isolated registry snapshot. `(cd ../verification && just ecosystem-test ignore)` also retains the library-specific smoke and compatibility checks.
