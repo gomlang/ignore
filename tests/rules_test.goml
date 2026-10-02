@@ -17,9 +17,9 @@ fn ignored(value: ignore::Gitignore, path: string, directory: bool) -> bool {
 
 #[test]
 fn excluded_parent_prevents_reinclusion() -> () {
-    let value = rules("build/\n!build/keep.gom\n");
+    let value = rules("build/\n!build/keep.goml\n");
     let result = testing::expect_ok(
-        value.matched("build/keep.gom", false),
+        value.matched("build/keep.goml", false),
         "inherit ignored parent",
     );
     testing::assert(result.is_ignored());
@@ -28,10 +28,10 @@ fn excluded_parent_prevents_reinclusion() -> () {
     testing::assert_eq(rule.line, 1);
     testing::assert_eq(rule.source, ".gitignore");
     testing::assert_eq(rule.pattern, "build/");
-    testing::assert(!ignored(rules("build/*\n!build/keep.gom\n"), "build/keep.gom", false));
+    testing::assert(!ignored(rules("build/*\n!build/keep.goml\n"), "build/keep.goml", false));
     testing::assert(!ignored(rules("build/*\n"), "build", true));
     testing::assert(ignored(rules("build/*\n"), "build/", true));
-    testing::assert(!ignored(rules("build/\n!build/\n"), "build/keep.gom", false));
+    testing::assert(!ignored(rules("build/\n!build/\n"), "build/keep.goml", false));
     testing::assert(!ignored(value, "build", false));
     testing::assert(ignored(value, "build", true));
 }
@@ -39,20 +39,20 @@ fn excluded_parent_prevents_reinclusion() -> () {
 #[test]
 fn nested_rules_override_low_priority_excludes_in_any_insertion_order() -> () {
     let nested = testing::expect_ok(
-        ignore::Gitignore::new().with_source("src", "src/.gitignore", "!main.gom\n/private.gom\n"),
+        ignore::Gitignore::new().with_source("src", "src/.gitignore", "!main.goml\n/private.goml\n"),
         "nested rules",
     );
-    let value = testing::expect_ok(nested.with_source("", ".gitignore", "*.gom\n"), "root rules");
+    let value = testing::expect_ok(nested.with_source("", ".gitignore", "*.goml\n"), "root rules");
     let value = testing::expect_ok(
-        value.with_excludes(".git/info/exclude", "main.gom\n*.tmp\n"),
+        value.with_excludes(".git/info/exclude", "main.goml\n*.tmp\n"),
         "lowest priority",
     );
-    testing::assert(!ignored(value, "src/main.gom", false));
-    testing::assert(ignored(value, "main.gom", false));
-    testing::assert(ignored(value, "src/private.gom", false));
+    testing::assert(!ignored(value, "src/main.goml", false));
+    testing::assert(ignored(value, "main.goml", false));
+    testing::assert(ignored(value, "src/private.goml", false));
     testing::assert(ignored(value, "src/a.tmp", false));
-    testing::assert(!ignored(nested, "other/private.gom", false));
-    testing::assert(!ignored(nested, "src/nested/private.gom", false));
+    testing::assert(!ignored(nested, "other/private.goml", false));
+    testing::assert(!ignored(nested, "src/nested/private.goml", false));
     testing::assert_eq(nested.len(), 2);
 }
 
@@ -68,9 +68,9 @@ fn ignore_lexing_handles_crlf_bom_escaping_spaces_and_invalid_patterns() -> () {
     for name in Vec::from_array(["literal", "space", "plain ", "starXname", "[broken", "\\"]) {
         testing::assert(!ignored(value, name, false));
     }
-    let anchored = rules("/root.gom\nfoo/bar\n");
-    testing::assert(ignored(anchored, "root.gom", false));
-    testing::assert(!ignored(anchored, "nested/root.gom", false));
+    let anchored = rules("/root.goml\nfoo/bar\n");
+    testing::assert(ignored(anchored, "root.goml", false));
+    testing::assert(!ignored(anchored, "nested/root.goml", false));
     testing::assert(!ignored(anchored, "nested/foo/bar", false));
 }
 

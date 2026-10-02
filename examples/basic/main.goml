@@ -28,20 +28,20 @@ pub fn exercise() -> () {
         "rules",
     );
     testing::assert(
-        testing::expect_ok(rules.matched("target/main.gom", false), "directory inheritance").is_ignored(),
+        testing::expect_ok(rules.matched("target/main.goml", false), "directory inheritance").is_ignored(),
     );
     testing::assert(
         testing::expect_ok(rules.matched("src/keep.tmp", false), "negation").is_whitelisted(),
     );
     testing::assert(
-        !testing::expect_ok(original.matched("target/main.gom", false), "persistent snapshot").is_ignored(),
+        !testing::expect_ok(original.matched("target/main.goml", false), "persistent snapshot").is_ignored(),
     );
     let globs = testing::expect_ok(
-        ignore::GlobSet::new(Vec::from_array(["**/*.gom", "**/test?.gom"])),
+        ignore::GlobSet::new(Vec::from_array(["**/*.goml", "**/test?.goml"])),
         "compile globs",
     );
     testing::assert(
-        testing::expect_ok(globs.matches("src/test1.gom"), "glob set") == Vec::from_array([0, 1]),
+        testing::expect_ok(globs.matches("src/test1.goml"), "glob set") == Vec::from_array([0, 1]),
     );
 }
 

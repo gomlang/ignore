@@ -39,14 +39,14 @@ fn walker_reads_hierarchy_prunes_and_honors_custom_excludes() -> () {
     write(dir.path(), "src/.gitignore", "!keep.tmp\n");
     for name in Vec::from_array(
         [
-            "main.gom",
+            "main.goml",
             "root.tmp",
             "root.log",
-            "src/main.gom",
+            "src/main.goml",
             "src/keep.tmp",
             "src/drop.tmp",
-            "build/main.gom",
-            "skip/file.gom",
+            "build/main.goml",
+            "skip/file.goml",
         ],
     ) {
         write(dir.path(), name, "");
@@ -62,11 +62,11 @@ fn walker_reads_hierarchy_prunes_and_honors_custom_excludes() -> () {
                 [
                     "",
                     ".gitignore",
-                    "main.gom",
+                    "main.goml",
                     "src",
                     "src/.gitignore",
                     "src/keep.tmp",
-                    "src/main.gom",
+                    "src/main.goml",
                 ],
             ),
     );
@@ -90,10 +90,10 @@ fn automatic_rules_and_git_pruning_can_be_disabled_independently() -> () {
     defer {
         testing::assert_ok(dir.close());
     };
-    write(dir.path(), ".gitignore", "*.gom\n");
+    write(dir.path(), ".gitignore", "*.goml\n");
     write(dir.path(), ".git/info/exclude", "*.txt\n");
-    write(dir.path(), ".git/source.gom", "");
-    write(dir.path(), "main.gom", "");
+    write(dir.path(), ".git/source.goml", "");
+    write(dir.path(), "main.goml", "");
     write(dir.path(), "notes.txt", "");
     let options = ignore::WalkOptions {
         gitignore: false,
@@ -101,12 +101,12 @@ fn automatic_rules_and_git_pruning_can_be_disabled_independently() -> () {
         ..ignore::WalkOptions::standard(),
     };
     let names = collect(dir.path(), options);
-    testing::assert(names.contains(".git/source.gom"));
-    testing::assert(names.contains("main.gom") && names.contains("notes.txt"));
+    testing::assert(names.contains(".git/source.goml"));
+    testing::assert(names.contains("main.goml") && names.contains("notes.txt"));
     let initial = rules("notes.txt\n");
     let names = collect(dir.path(), ignore::WalkOptions { initial, ..options });
     testing::assert(!names.contains("notes.txt"));
-    testing::assert(names.contains("main.gom"));
+    testing::assert(names.contains("main.goml"));
 }
 
 #[test]
@@ -115,8 +115,8 @@ fn walk_depth_skip_current_directory_and_file_roots() -> () {
     defer {
         testing::assert_ok(dir.close());
     };
-    write(dir.path(), "a/deep/file.gom", "");
-    write(dir.path(), "b/file.gom", "");
+    write(dir.path(), "a/deep/file.goml", "");
+    write(dir.path(), "b/file.goml", "");
     let base = ignore::WalkOptions::standard();
     testing::assert(
         collect(dir.path(), ignore::WalkOptions { max_depth: 0, ..base }) == Vec::from_array([""]),
@@ -134,10 +134,10 @@ fn walk_depth_skip_current_directory_and_file_roots() -> () {
             walker.skip_current_dir();
         }
     }
-    testing::assert(output == Vec::from_array(["", "a", "b", "b/file.gom"]));
+    testing::assert(output == Vec::from_array(["", "a", "b", "b/file.goml"]));
     testing::assert(
         collect(
-            path::join(dir.path(), "b/file.gom"),
+            path::join(dir.path(), "b/file.goml"),
             ignore::WalkOptions { initial: rules("*"), ..base },
         )
             == Vec::from_array([""]),
@@ -150,11 +150,11 @@ fn symlink_policy_and_ancestor_cycles_are_explicit() -> () {
     defer {
         testing::assert_ok(dir.close());
     };
-    write(dir.path(), "real/file.gom", "");
+    write(dir.path(), "real/file.goml", "");
     testing::assert_ok(fs::symbolic_link("real", path::join(dir.path(), "alias")));
     testing::assert_ok(fs::symbolic_link("..", path::join(dir.path(), "real/back")));
     let basic = collect(dir.path(), ignore::WalkOptions::standard());
-    testing::assert(basic.contains("alias") && !basic.contains("alias/file.gom"));
+    testing::assert(basic.contains("alias") && !basic.contains("alias/file.goml"));
     let walker = testing::expect_ok(
         ignore::Walker::new(
             dir.path(),
@@ -179,7 +179,7 @@ fn symlink_policy_and_ancestor_cycles_are_explicit() -> () {
         }
     }
     testing::assert_eq(cycles, 2);
-    testing::assert(files == Vec::from_array(["alias/file.gom", "real/file.gom"]));
+    testing::assert(files == Vec::from_array(["alias/file.goml", "real/file.goml"]));
 }
 
 #[test]
@@ -189,8 +189,8 @@ fn source_failures_skip_only_the_affected_branch() -> () {
         testing::assert_ok(dir.close());
     };
     write(dir.path(), "bad/.gitignore", "abcdef");
-    write(dir.path(), "bad/main.gom", "");
-    write(dir.path(), "good/main.gom", "");
+    write(dir.path(), "bad/main.goml", "");
+    write(dir.path(), "good/main.goml", "");
     let options = ignore::WalkOptions {
         limits: ignore::Limits { max_source_bytes: 3, ..ignore::Limits::standard() },
         ..ignore::WalkOptions::standard(),
@@ -209,7 +209,7 @@ fn source_failures_skip_only_the_affected_branch() -> () {
         }
     }
     testing::assert_eq(failures, 1);
-    testing::assert(!names.contains("bad/main.gom") && names.contains("good/main.gom"));
+    testing::assert(!names.contains("bad/main.goml") && names.contains("good/main.goml"));
     let missing = testing::expect_ok(
         ignore::Walker::new(path::join(dir.path(), "missing"), options),
         "deferred metadata",
@@ -293,7 +293,7 @@ fn cancelled_walk_is_fused_and_does_no_more_io() -> () {
     defer {
         testing::assert_ok(dir.close());
     };
-    write(dir.path(), "main.gom", "");
+    write(dir.path(), "main.goml", "");
     context::with_cancel(
         context::Context::background(),
         |ctx, cancel| {
@@ -322,7 +322,7 @@ fn parallel_callbacks_are_bounded_and_joined() -> () {
         testing::assert_ok(dir.close());
     };
     for index in 0..12 {
-        write(dir.path(), index.to_string() + ".gom", "");
+        write(dir.path(), index.to_string() + ".goml", "");
     }
     let state: Channel[(isize, isize, isize)] = Channel::new(1);
     state.send((0, 0, 0));
@@ -438,8 +438,8 @@ fn worktree_gitdir_and_commondir_excludes_are_resolved() -> () {
         collect(path::join(dir.path(), "checkout"), ignore::WalkOptions::standard()) == names,
     );
     write(dir.path(), "ordinary/.git", "gitdir: ../separate\n");
-    write(dir.path(), "separate/info/exclude", "*.gom\n");
-    write(dir.path(), "ordinary/main.gom", "");
+    write(dir.path(), "separate/info/exclude", "*.goml\n");
+    write(dir.path(), "ordinary/main.goml", "");
     testing::assert(
         collect(path::join(dir.path(), "ordinary"), ignore::WalkOptions::standard())
             == Vec::from_array([""]),
@@ -470,11 +470,11 @@ fn invalid_git_metadata_and_symlink_ignore_files_are_handled() -> () {
         ).kind,
         ignore::ErrorKind::InvalidPath,
     );
-    write(dir.path(), "outside", "*.gom\n");
-    write(dir.path(), "links/main.gom", "");
+    write(dir.path(), "outside", "*.goml\n");
+    write(dir.path(), "links/main.goml", "");
     testing::assert_ok(fs::symbolic_link("../outside", path::join(dir.path(), "links/.gitignore")));
     let names = collect(path::join(dir.path(), "links"), ignore::WalkOptions::standard());
-    testing::assert(names.contains("main.gom"));
+    testing::assert(names.contains("main.goml"));
     testing::assert(names.contains(".gitignore"));
 }
 
@@ -488,9 +488,9 @@ fn git_metadata_paths_preserve_significant_spaces() -> () {
     write(dir.path(), " git data /commondir", "../ common data \n");
     write(dir.path(), " common data /info/exclude", "*.tmp\n");
     write(dir.path(), "checkout/drop.tmp", "");
-    write(dir.path(), "checkout/main.gom", "");
+    write(dir.path(), "checkout/main.goml", "");
     testing::assert(
         collect(path::join(dir.path(), "checkout"), ignore::WalkOptions::standard())
-            == Vec::from_array(["", "main.gom"]),
+            == Vec::from_array(["", "main.goml"]),
     );
 }

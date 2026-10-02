@@ -4,12 +4,12 @@
 
 Add `"ecosystem::ignore" = "0.1.0"` under your module's `[dependencies]`. `ecosystem::tempfile` is used by the black-box filesystem tests.
 
-```gom
+```goml
 use ecosystem::ignore;
 use std::context;
 
 fn sources(root: string) -> Result[Vec[string], ignore::Error] {
-    let wanted = ignore::Glob::new("**/*.gom")?;
+    let wanted = ignore::Glob::new("**/*.goml")?;
     let options = ignore::WalkOptions {
         exclude: Option::Some(|relative, _| relative == "_artifact"),
         ..ignore::WalkOptions::standard()
@@ -75,7 +75,7 @@ Git semantics are based on the [Gitignore documentation](https://git-scm.com/doc
 
 ## Development and examples
 
-Requires GoML 0.1.55 or newer. The `examples/basic/` example shares the root manifest; test-only helpers are declared in `[dev-dependencies]`. From the library root, run:
+Requires GoML 0.1.56 or newer. The `examples/basic/` example shares the root manifest; test-only helpers are declared in `[dev-dependencies]`. From the library root, run:
 
 ```sh
 goml run --example basic
