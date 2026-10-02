@@ -1,0 +1,66 @@
+package tests;
+
+use ecosystem::ignore;
+use std::context;
+use std::testing;
+
+#[test]
+fn exclude_callback_close_prevents_yield_and_pending_children() -> () {
+    let dir = temporary();
+    defer {
+        let _ = dir.close();
+    };
+    write(dir.path(), "a/child", "");
+    for excluded in Vec::from_array([false, true]) {
+        let slot: Ref[Option[ignore::Walker]] = Ref::new(Option::None);
+        let options = ignore::WalkOptions {
+            exclude: Option::Some(
+                |_, _| {
+                    testing::expect_some(slot.get(), "walker").close();
+                    excluded
+                },
+            ),
+            ..ignore::WalkOptions::standard(),
+        };
+        let walker = testing::expect_ok(ignore::Walker::new(dir.path(), options), "walker");
+        slot.set(Option::Some(walker));
+        testing::assert_some(walker.next(context::Context::background()));
+        testing::assert_none(walker.next(context::Context::background()));
+        testing::assert_none(walker.next(context::Context::background()));
+        testing::assert_eq(walker.visited_count(), 2);
+        slot.set(Option::None);
+    }
+}
+
+#[test]
+fn exclude_callback_cancellation_prevents_yield() -> () {
+    let dir = temporary();
+    defer {
+        let _ = dir.close();
+    };
+    write(dir.path(), "a/child", "");
+    for excluded in Vec::from_array([false, true]) {
+        context::with_cancel(
+            context::Context::background(),
+            |ctx, cancel| {
+                let options = ignore::WalkOptions {
+                    exclude: Option::Some(
+                        |_, _| {
+                            cancel.cancel();
+                            excluded
+                        },
+                    ),
+                    ..ignore::WalkOptions::standard(),
+                };
+                let walker = testing::expect_ok(ignore::Walker::new(dir.path(), options), "walker");
+                testing::assert_some(walker.next(ctx));
+                let error = testing::expect_err(
+                    testing::expect_some(walker.next(ctx), "cancelled"),
+                    "cancellation",
+                );
+                testing::assert_eq(error.kind, ignore::ErrorKind::Cancelled);
+                testing::assert_none(walker.next(context::Context::background()));
+            },
+        );
+    }
+}

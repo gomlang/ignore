@@ -1,0 +1,43 @@
+package tests;
+
+use ecosystem::ignore;
+use ecosystem::tempfile;
+use std::context;
+use std::fs;
+use std::testing;
+
+#[test]
+fn exclusion_callback_can_cancel_the_current_step() -> () {
+    let root = testing::expect_ok(tempfile::TempDir::new(), "directory");
+    defer {
+        let _ = root.close();
+    };
+    testing::assert_ok(fs::write_file_structured(root.path() + "/file", ""));
+    context::with_cancel(
+        context::Context::background(),
+        |ctx, cancel| {
+            let walker = testing::expect_ok(
+                ignore::Walker::new(
+                    root.path(),
+                    ignore::WalkOptions {
+                        exclude: Option::Some(
+                            |_, _| {
+                                cancel.cancel();
+                                false
+                            },
+                        ),
+                        ..ignore::WalkOptions::standard(),
+                    },
+                ),
+                "walker",
+            );
+            testing::assert_some(walker.next(ctx));
+            let error = testing::expect_err(
+                testing::expect_some(walker.next(ctx), "cancellation"),
+                "cancelled",
+            );
+            testing::assert_eq(error.kind, ignore::ErrorKind::Cancelled);
+            testing::assert_none(walker.next(ctx));
+        },
+    );
+}
