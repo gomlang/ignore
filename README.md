@@ -59,6 +59,11 @@ Ignore files are read in bounded chunks with `O_NOFOLLOW` and `O_NONBLOCK`; nonr
 
 `walk_parallel(root, options, context, workers, callback)` streams a single traversal through a queue of `workers` entries to exactly that many callback workers (1–1024). It bounds callback concurrency and joins every callback before returning. Callbacks receive an entry and a child cancellation context. The successful count includes all callback-processed entries, including the root. Traversal and ignore decisions remain serial and ordered; callback execution and completion order are unspecified. A callback or traversal error cancels further admission, waits for in-flight callbacks, and returns an error, preferring an observed callback error over derivative cancellation. Callbacks must cooperate with cancellation; a callback that never returns prevents completion. There is no panic recovery.
 
+Exclude callbacks may close their own walker. That close permanently ends the
+current `next` call as well as future calls, without retaining pending children.
+Cancellation observed after an exclude callback yields one `Cancelled` error and
+then exhaustion, including when the callback excludes the current entry.
+
 ## Bounds and validation
 
 `Limits::standard()` allows 4,096 bytes per pattern, 32,768 per relative path, 100,000 rules, 1 MiB per source, and 16,777,216 matching work units per query. Matching work includes ancestor rule scans and character-class range checks. Work limits are shared across a complete Gitignore or GlobSet query. `WalkOptions` defaults to depth 256, 100,000 entries per directory, and 1,000,000 visited or queued entries combined. `max_depth` is an intentional cutoff; other exhausted limits produce recoverable errors. Walker limits also constrain initial rules and automatically loaded sources. Rulesets use immutable flat rule arrays; extending a ruleset copies that array, and matching scans applicable rules rather than compiling a multi-pattern automaton.

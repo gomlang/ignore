@@ -454,7 +454,15 @@ impl Walker {
                     continue;
                 }
                 if let Some(exclude) = self.options.exclude {
-                    if exclude(work.relative, is_dir) {
+                    let excluded = exclude(work.relative, is_dir);
+                    if self.done.get() {
+                        return Option::None
+                    }
+                    if ctx.error().is_some() {
+                        self.close();
+                        return Option::Some(Result::Err(cancelled(ctx)))
+                    }
+                    if excluded {
                         continue;
                     }
                 }
