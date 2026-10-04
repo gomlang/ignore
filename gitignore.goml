@@ -195,6 +195,7 @@ impl Gitignore {
         Error,
     ] {
         let mut matched = Option::None;
+        let mut basename = Option::None;
         for rule in self.rules.iter() {
             if budget.get() == 0 {
                 return Result::Err(failure(ErrorKind::Limit, "matching work limit exceeded"))
@@ -211,7 +212,18 @@ impl Gitignore {
                 continue;
             };
             let candidate = if rule.basename {
-                relative.split("/").last().unwrap_or(relative)
+                match basename {
+                    Some(value) => value,
+                    None => {
+                        let mut start = path.byte_len();
+                        while start > 0 && path.byte_get(start - 1) != b'/' {
+                            start -= 1;
+                        }
+                        let value = path.byte_slice(start, path.byte_len());
+                        basename = Option::Some(value);
+                        value
+                    },
+                }
             } else {
                 relative
             };
