@@ -58,6 +58,10 @@ one slash, while `**/x` also matches `x`.
 
 The parser handles CRLF, an initial UTF-8 BOM, comments, blank lines, escaped initial `#`/`!`, escaped trailing spaces, negation, leading `/` anchors, directory-only trailing `/`, and patterns scoped relative to each ignore file. Unanchored patterns without `/` match basenames at any depth. Malformed Gitignore glob patterns are retained as nonmatching rules, as with Git; size-limit failures remain errors.
 
+Gitignore pattern-byte limits count the pattern after removing negation, anchor
+and directory-only markers. Initial rules and automatically loaded sources use
+the same measurement, including malformed patterns retained as nonmatching rules.
+
 `matched(relative_path, is_directory)` returns a `Match` with `is_ignored()`, `is_whitelisted()`, `rule()`, and `inherited_from()`. A `Rule` exposes source name, 1-based line, original pattern, base, negation, and directory-only status. Every ancestor is checked before the target: a negation cannot reinclude a file beneath an ignored directory. The explicitly supplied root `""` or `"."` is always included. Absolute paths, NUL, and `..` components are rejected; redundant separators and `.` components are normalized.
 
 An explicit trailing slash is preserved for Git's query semantics. For example, with `build/*`, `matched("build", true)` permits entering that directory, while `matched("build/", true)` matches the empty suffix after `/`, as `git check-ignore build/` does. Filesystem walking uses directory names without trailing slashes. Case-insensitive matching folds pattern bytes only; source bases continue to identify exact directory paths.

@@ -1,0 +1,52 @@
+package tests;
+
+use ecosystem::ignore;
+use std::testing;
+
+#[test]
+fn initial_rules_use_the_same_pattern_length_as_loaded_sources() -> () {
+    let dir = temporary();
+    defer {
+        testing::assert_ok(dir.close());
+    };
+    for name in["a", "b", "c/child", "d"] {
+        write(dir.path(), name, "");
+    }
+    let limits = ignore::Limits { max_pattern_bytes: 1, ..ignore::Limits::standard() };
+    let text = "!a\n/b\nc/\n![\n";
+    let empty = testing::expect_ok(ignore::Gitignore::with_options(limits, false), "limits");
+    let initial = testing::expect_ok(empty.with_source("", "initial", text), "one-byte patterns");
+    let options = ignore::WalkOptions {
+        limits,
+        initial,
+        gitignore: false,
+        ..ignore::WalkOptions::standard(),
+    };
+    testing::assert(collect(dir.path(), options) == Vec::from_array(["", "a", "d"]));
+    write(dir.path(), ".gitignore", text);
+    testing::assert(
+        collect(
+            dir.path(),
+            ignore::WalkOptions {
+                initial: empty,
+                gitignore: true,
+                exclude: Option::Some(|name, _| name == ".gitignore"),
+                ..options,
+            },
+        )
+            == Vec::from_array(["", "a", "d"]),
+    );
+    for text in["!aa", "/bb", "cc/", "![ab"] {
+        let initial = testing::expect_ok(
+            ignore::Gitignore::new().with_source("", "long", text),
+            "larger rule",
+        );
+        testing::assert_eq(
+            testing::expect_err(
+                ignore::Walker::new(dir.path(), ignore::WalkOptions { initial, ..options }),
+                "stricter walker pattern limit",
+            ).kind,
+            ignore::ErrorKind::Limit,
+        );
+    }
+}

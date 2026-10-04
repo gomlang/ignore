@@ -7,6 +7,7 @@ pub struct Rule {
     pub base: string,
     pub negated: bool,
     pub directory_only: bool,
+    pattern_bytes: isize,
     glob: Option[Glob],
     basename: bool,
     priority: isize,
@@ -64,7 +65,7 @@ impl Gitignore {
             return Result::Err(failure(ErrorKind::Limit, "initial rule count exceeds walker limit"))
         }
         for rule in self.rules.iter() {
-            if rule.pattern.byte_len() > limits.max_pattern_bytes
+            if rule.pattern_bytes > limits.max_pattern_bytes
                 || rule.base.byte_len() > limits.max_path_bytes {
                 return Result::Err(failure(ErrorKind::Limit, "initial rule exceeds walker limits"))
             }
@@ -167,6 +168,7 @@ impl Gitignore {
                     base,
                     negated,
                     directory_only,
+                    pattern_bytes: pattern.byte_len(),
                     glob,
                     basename,
                     priority,
