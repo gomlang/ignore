@@ -155,16 +155,28 @@ fn read_source(file_path: string, limits: Limits, ctx: context::Context) -> Resu
     )
 }
 
-fn directory_names(directory: string, maximum: isize, ctx: context::Context) -> Result[
-    Vec[string],
-    Error,
-] {
+fn directory_names(
+    directory: string,
+    maximum: isize,
+    ancestors: FrozenVec[string],
+    ctx: context::Context,
+) -> Result[(Vec[string], string), Error] {
     let file = fd::open(directory, fd::O_RDONLY | fd::O_DIRECTORY, 0).map_err(
         |error| io_failure(directory, error),
     )?;
     defer {
         let _ = file.close();
     };
+    let metadata = file.stat().map_err(|error| io_failure(directory, error))?;
+    let identity = metadata.dev.to_string() + ":" + metadata.ino.to_string();
+    if ancestors.contains(identity) {
+        return Result::Err(
+            Error {
+                path: directory,
+                ..failure(ErrorKind::Cycle, "symbolic link reaches an ancestor directory"),
+            },
+        )
+    }
     let names: Vec[string] = Vec::new();
     loop {
         if ctx.error().is_some() {
@@ -196,7 +208,32 @@ fn directory_names(directory: string, maximum: isize, ctx: context::Context) -> 
         }
     }
     names.sort_by_ordering(|left, right| left.cmp(right));
-    Result::Ok(names)
+    Result::Ok((names, identity))
+}
+
+fn filesystem_join(parent: string, child: string) -> string {
+    if parent.ends_with("/") {
+        parent + child
+    } else {
+        parent + "/" + child
+    }
+}
+
+fn root_metadata_path(root: string) -> string {
+    let mut end = root.byte_len();
+    loop {
+        while end > 1 && root.byte_get(end - 1) == b'/' {
+            end -= 1;
+        }
+        if end >= 2 && root.byte_slice(end - 2, end) == "/." {
+            end -= 2;
+            if end == 0 {
+                return "/"
+            }
+        } else {
+            return root.byte_slice(0, end)
+        }
+    }
 }
 
 fn metadata_line(text: string) -> string {
@@ -216,7 +253,7 @@ fn git_exclude_path(root: string, limits: Limits, ctx: context::Context) -> Resu
     Option[string],
     Error,
 ] {
-    let marker = path::join(root, ".git");
+    let marker = filesystem_join(root, ".git");
     let metadata = match fs::symlink_metadata(marker) {
         Ok(value) => value,
         Err(error) => if error.kind() == io::ErrorKind::NotFound {
@@ -246,14 +283,14 @@ fn git_exclude_path(root: string, limits: Limits, ctx: context::Context) -> Resu
             )
         }
         if path::is_absolute(target) {
-            path::clean(target)
+            target
         } else {
-            path::join(root, target)
+            filesystem_join(root, target)
         }
     } else {
         return Result::Ok(Option::None)
     };
-    let common = match read_source(path::join(gitdir, "commondir"), limits, ctx)? {
+    let common = match read_source(filesystem_join(gitdir, "commondir"), limits, ctx)? {
         None => gitdir,
         Some(text) => {
             let target = metadata_line(text);
@@ -262,19 +299,19 @@ fn git_exclude_path(root: string, limits: Limits, ctx: context::Context) -> Resu
                 || target.byte_len() > limits.max_path_bytes {
                 return Result::Err(
                     Error {
-                        path: path::join(gitdir, "commondir"),
+                        path: filesystem_join(gitdir, "commondir"),
                         ..failure(ErrorKind::InvalidPath, "invalid common gitdir path"),
                     },
                 )
             }
             if path::is_absolute(target) {
-                path::clean(target)
+                target
             } else {
-                path::join(gitdir, target)
+                filesystem_join(gitdir, target)
             }
         },
     };
-    Result::Ok(Option::Some(path::join(common, "info/exclude")))
+    Result::Ok(Option::Some(filesystem_join(common, "info/exclude")))
 }
 
 impl Walker {
@@ -294,9 +331,16 @@ impl Walker {
                 ),
             )
         }
-        let root = path::absolute_structured(root).map_err(
-            |error| failure(ErrorKind::InvalidPath, error.to_string()),
-        )?;
+        let root = if path::is_absolute(root) {
+            root
+        } else {
+            filesystem_join(
+                path::absolute_structured(".").map_err(
+                    |error| failure(ErrorKind::InvalidPath, error.to_string()),
+                )?,
+                root,
+            )
+        };
         Result::Ok(
             Walker {
                 options,
@@ -342,30 +386,21 @@ impl Walker {
                     }
                 }
             }
-            let source = path::join(work.path, ".gitignore");
+            let source = filesystem_join(work.path, ".gitignore");
             if let Some(text) = read_source(source, self.options.limits, ctx)? {
                 rules = rules.with_source(work.relative, source, text)?;
             }
         }
-        let canonical = fs::canonicalize(work.path).map_err(|error| fs_failure(work.path, error))?;
-        if work.ancestors.contains(canonical) {
-            return Result::Err(
-                Error {
-                    path: work.path,
-                    ..failure(ErrorKind::Cycle, "symbolic link reaches an ancestor directory"),
-                },
-            )
-        }
-        let ancestors = work.ancestors.to_vec();
-        ancestors.push(canonical);
-        let ancestors = ancestors.freeze();
         let remaining = self.options.max_visited - self.visited.get() - self.stack.len();
         let maximum = if remaining < self.options.max_entries_per_directory {
             remaining
         } else {
             self.options.max_entries_per_directory
         };
-        let names = directory_names(work.path, maximum, ctx)?;
+        let (names, identity) = directory_names(work.path, maximum, work.ancestors, ctx)?;
+        let ancestors = work.ancestors.to_vec();
+        ancestors.push(identity);
+        let ancestors = ancestors.freeze();
         let mut index = names.len();
         while index > 0 {
             index -= 1;
@@ -377,7 +412,7 @@ impl Walker {
             };
             self.stack.push(
                 Work {
-                    path: path::join(work.path, name),
+                    path: filesystem_join(work.path, name),
                     relative,
                     depth: work.depth + 1,
                     rules,
@@ -437,6 +472,19 @@ impl Walker {
             let metadata = match fs::symlink_metadata(work.path) {
                 Ok(value) => value,
                 Err(error) => return Option::Some(Result::Err(fs_failure(work.path, error))),
+            };
+            let metadata = if work.depth == 0 {
+                let lookup = root_metadata_path(work.path);
+                if lookup != work.path {
+                    match fs::symlink_metadata(lookup) {
+                        Ok(value) => value,
+                        Err(error) => return Option::Some(Result::Err(fs_failure(work.path, error))),
+                    }
+                } else {
+                    metadata
+                }
+            } else {
+                metadata
             };
             let link = metadata.file_type().is_symlink();
             let metadata = if link && self.options.symlinks == Symlinks::Follow {

@@ -1,0 +1,156 @@
+package tests;
+
+use ecosystem::ignore;
+use std::context;
+use std::fs;
+use std::testing;
+
+#[test]
+fn walker_preserves_root_components_for_entries_rules_and_cycles() -> () {
+    let dir = temporary();
+    defer {
+        testing::assert_ok(dir.close());
+    };
+    testing::assert_ok(fs::create_dir_all(dir.path() + "/real/anchor"));
+    testing::assert_ok(fs::symbolic_link(dir.path() + "/real/anchor", dir.path() + "/link"));
+    write(dir.path(), "real/tree/.gitignore", "*.tmp\n");
+    write(dir.path(), "real/tree/keep", "correct");
+    write(dir.path(), "real/tree/skip.tmp", "ignored");
+    write(dir.path(), "tree/keep", "wrong");
+    testing::assert_ok(fs::symbolic_link(".", dir.path() + "/real/tree/back"));
+    let root = dir.path() + "/link/../tree";
+    let walker = testing::expect_ok(
+        ignore::Walker::new(root, ignore::WalkOptions::standard()),
+        "walker",
+    );
+    defer walker.close();
+    let names: Vec[string] = Vec::new();
+    while let Some(item) = walker.next(context::Context::background()) {
+        let entry = testing::expect_ok(item, "entry");
+        names.push(entry.relative_path());
+        testing::assert(entry.path().starts_with(root));
+        if entry.relative_path() == "keep" {
+            testing::assert_eq(
+                testing::expect_ok(fs::read_file_structured(entry.path()), "entry path"),
+                "correct",
+            );
+        }
+    }
+    testing::assert(names == Vec::from_array(["", ".gitignore", "back", "keep"]));
+    let walker = testing::expect_ok(
+        ignore::Walker::new(
+            root,
+            ignore::WalkOptions {
+                symlinks: ignore::Symlinks::Follow,
+                ..ignore::WalkOptions::standard(),
+            },
+        ),
+        "follow walker",
+    );
+    defer walker.close();
+    let mut cycles = 0;
+    let mut kept = false;
+    while let Some(item) = walker.next(context::Context::background()) {
+        match item {
+            Err(error) => {
+                testing::assert_eq(error.kind, ignore::ErrorKind::Cycle);
+                testing::assert_eq(error.path, root + "/back");
+                cycles += 1;
+            },
+            Ok(entry) => {
+                if entry.relative_path() == "keep" {
+                    kept = true;
+                }
+            },
+        }
+    }
+    testing::assert_eq(cycles, 1);
+    testing::assert(kept);
+}
+
+#[test]
+fn walker_does_not_erase_invalid_intermediate_root_components() -> () {
+    let dir = temporary();
+    defer {
+        testing::assert_ok(dir.close());
+    };
+    write(dir.path(), "regular", "file");
+    for component in Vec::from_array(
+        ["missing/..", "regular/..", "missing/.", "regular/.", "missing/", "regular/"],
+    ) {
+        let root = dir.path() + "/" + component;
+        let walker = testing::expect_ok(
+            ignore::Walker::new(root, ignore::WalkOptions::standard()),
+            "walker",
+        );
+        defer walker.close();
+        let error = testing::expect_err(
+            testing::expect_some(walker.next(context::Context::background()), "root result"),
+            "invalid parent",
+        );
+        testing::assert_eq(error.kind, ignore::ErrorKind::Io);
+        testing::assert_eq(error.path, root);
+        testing::assert_none(walker.next(context::Context::background()));
+    }
+}
+
+#[test]
+fn root_directory_suffixes_preserve_the_explicit_symlink_policy() -> () {
+    let dir = temporary();
+    defer {
+        testing::assert_ok(dir.close());
+    };
+    write(dir.path(), "target/file", "visible");
+    testing::assert_ok(fs::symbolic_link(dir.path() + "/target", dir.path() + "/link"));
+    for suffix in Vec::from_array(["", "/", "/.", "/./", "//././"]) {
+        let root = dir.path() + "/link" + suffix;
+        let walker = testing::expect_ok(
+            ignore::Walker::new(root, ignore::WalkOptions::standard()),
+            "skip walker",
+        );
+        defer walker.close();
+        let entry = testing::expect_ok(
+            testing::expect_some(walker.next(context::Context::background()), "root entry"),
+            "root",
+        );
+        testing::assert(entry.is_symlink());
+        testing::assert_eq(entry.path(), root);
+        testing::assert_none(walker.next(context::Context::background()));
+        testing::assert(
+            collect(
+                root,
+                ignore::WalkOptions {
+                    symlinks: ignore::Symlinks::Follow,
+                    ..ignore::WalkOptions::standard(),
+                },
+            )
+                == Vec::from_array(["", "file"]),
+        );
+    }
+}
+
+#[test]
+fn git_metadata_paths_preserve_relative_and_absolute_symlink_parents() -> () {
+    let dir = temporary();
+    defer {
+        testing::assert_ok(dir.close());
+    };
+    testing::assert_ok(fs::create_dir_all(dir.path() + "/real/anchor"));
+    testing::assert_ok(fs::symbolic_link(dir.path() + "/real/anchor", dir.path() + "/link"));
+    write(dir.path(), "real/metadata/info/exclude", "*.tmp\n");
+    write(dir.path(), "checkout/keep", "visible");
+    write(dir.path(), "checkout/skip.tmp", "ignored");
+    for target in Vec::from_array(["../link/../metadata", dir.path() + "/link/../metadata"]) {
+        write(dir.path(), "checkout/.git", "gitdir: " + target + "\n");
+        testing::assert(
+            collect(dir.path() + "/checkout", ignore::WalkOptions::standard())
+                == Vec::from_array(["", "keep"]),
+        );
+        write(dir.path(), "checkout/.git", "gitdir: ../state\n");
+        write(dir.path(), "state/commondir", target + "\n");
+        testing::assert(
+            collect(dir.path() + "/checkout", ignore::WalkOptions::standard())
+                == Vec::from_array(["", "keep"]),
+        );
+    }
+}
