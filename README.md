@@ -45,6 +45,8 @@ unknown POSIX class such as `[[:unknown:]]` remains invalid.
 pattern tokens, so temporary row allocation no longer grows with pattern length.
 Work-budget charging is unchanged, including character-class ranges; matching
 remains O(pattern tokens × path bytes) rather than a multipattern automaton.
+Empty patterns compare directly with an empty path without allocating matching
+rows, including when a `GlobSet` contains many empty patterns.
 
 A recursive star run followed by an escaped separator also crosses directories,
 but retains that literal separator: `**\/x` matches `a/b/x`, and requires at least

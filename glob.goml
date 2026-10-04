@@ -215,6 +215,9 @@ impl Glob {
     }
 
     fn matches_budget(self: Glob, path: string, budget: Ref[isize]) -> Result[bool, Error] {
+        if self.tokens.len() == 0 {
+            return Result::Ok(path == "")
+        }
         let width = path.byte_len() + 1;
         for token in self.tokens.iter() {
             let cost = match token {
