@@ -1,0 +1,114 @@
+package tests;
+
+use ecosystem::ignore;
+use std::context;
+use std::panic;
+use std::testing;
+
+#[test]
+fn parallel_callback_panic_unblocks_full_producer_queue() -> () {
+    let dir = temporary();
+    defer {
+        let _ = dir.close();
+    };
+    for index in 0..16 {
+        write(dir.path(), index.to_string(), "");
+    }
+    let result = panic::catch(
+        || ignore::walk_parallel(
+            dir.path(),
+            ignore::WalkOptions::standard(),
+            context::Context::background(),
+            1,
+            |_, _| panic::raise("parallel callback panic"),
+        ),
+    );
+    let error = testing::expect_err(result, "callback panic propagates");
+    testing::assert_eq(error.message(), "parallel callback panic");
+}
+
+#[test]
+fn parallel_callback_panic_cancels_and_joins_other_callbacks() -> () {
+    let dir = temporary();
+    defer {
+        let _ = dir.close();
+    };
+    for index in 0..16 {
+        write(dir.path(), index.to_string(), "");
+    }
+    let entered: Channel[()] = Channel::new(1);
+    let exited: Channel[()] = Channel::new(1);
+    let result = panic::catch(
+        || ignore::walk_parallel(
+            dir.path(),
+            ignore::WalkOptions::standard(),
+            context::Context::background(),
+            2,
+            |entry, ctx| {
+                if entry.depth() == 0 {
+                    defer exited.send(());
+                    entered.send(());
+                    let _ = ctx.done().recv();
+                    Result::Ok(())
+                } else {
+                    let _ = entered.recv();
+                    panic::raise("parallel sibling panic")
+                }
+            },
+        ),
+    );
+    testing::assert_eq(
+        testing::expect_err(result, "callback panic propagates").message(),
+        "parallel sibling panic",
+    );
+    testing::assert(
+        select {
+            recv(exited) as _ => true,
+            default => false,
+        },
+    );
+}
+
+#[test]
+fn parallel_exclude_panic_cancels_and_joins_callback_workers() -> () {
+    let dir = temporary();
+    defer {
+        let _ = dir.close();
+    };
+    write(dir.path(), "file", "");
+    let entered: Channel[()] = Channel::new(1);
+    let exited: Channel[()] = Channel::new(1);
+    let options = ignore::WalkOptions {
+        exclude: Option::Some(
+            |_, _| {
+                let _ = entered.recv();
+                panic::raise("parallel traversal panic")
+            },
+        ),
+        ..ignore::WalkOptions::standard(),
+    };
+    let result = panic::catch(
+        || ignore::walk_parallel(
+            dir.path(),
+            options,
+            context::Context::background(),
+            1,
+            |_, ctx| {
+                defer exited.send(());
+                entered.send(());
+                let _ = ctx.done().recv();
+                Result::Ok(())
+            },
+        ),
+    );
+    testing::assert_eq(
+        testing::expect_err(result, "traversal panic propagates").message(),
+        "parallel traversal panic",
+    );
+    testing::assert(
+        select {
+            recv(exited) as _ => true,
+            default => false,
+        },
+    );
+}
