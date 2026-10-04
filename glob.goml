@@ -219,15 +219,37 @@ impl Glob {
             return Result::Ok(path == "")
         }
         let width = path.byte_len() + 1;
+        let mut literal = true;
         for token in self.tokens.iter() {
             let cost = match token {
-                Class(ranges, _) => ranges.len() + 1,
-                _ => 1,
+                Literal(_) => 1,
+                Class(ranges, _) => {
+                    literal = false;
+                    ranges.len() + 1
+                },
+                _ => {
+                    literal = false;
+                    1
+                },
             };
             if cost > budget.get() / width {
                 return Result::Err(failure(ErrorKind::Limit, "matching work limit exceeded"))
             }
             budget.set(budget.get() - cost * width);
+        }
+        if literal {
+            if self.tokens.len() != path.byte_len() {
+                return Result::Ok(false)
+            }
+            for index in 0..self.tokens.len() {
+                if let Literal(expected) = self.tokens.get(index) {
+                    if fold(path.byte_get(index), self.insensitive)
+                        != fold(expected, self.insensitive) {
+                        return Result::Ok(false)
+                    }
+                }
+            }
+            return Result::Ok(true)
         }
         let mut previous: Vec[bool] = Vec::new();
         for index in 0..width {

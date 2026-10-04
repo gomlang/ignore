@@ -28,6 +28,8 @@ fn globstar_separator_and_byte_semantics() -> () {
     testing::assert(!glob("?.goml", "é.goml"));
     testing::assert(glob("??.goml", "é.goml"));
     testing::assert(glob("中文.*", "中文.goml"));
+    testing::assert(glob("中文", "中文"));
+    testing::assert(!glob("中文", "中"));
     testing::assert(glob("star\\*name", "star*name"));
     testing::assert(glob("", ""));
     testing::assert(!glob("", "a"));
@@ -47,6 +49,13 @@ fn character_classes_posix_and_ascii_folding() -> () {
         "ASCII case folding",
     );
     testing::assert(testing::expect_ok(insensitive.is_match("hello.goml"), "folded match"));
+    let literal = testing::expect_ok(
+        ignore::Glob::with_options("ReadMe\\?.MD", ignore::Limits::standard(), true),
+        "folded literal with an escaped metacharacter",
+    );
+    testing::assert(testing::expect_ok(literal.is_match("README?.md"), "folded literal"));
+    testing::assert(!testing::expect_ok(literal.is_match("READMEa.md"), "literal question mark"));
+    testing::assert(!testing::expect_ok(literal.is_match("README?.md/child"), "longer path"));
     let mixed_range = testing::expect_ok(
         ignore::Glob::with_options("[Z-a]", ignore::Limits::standard(), true),
         "mixed range",

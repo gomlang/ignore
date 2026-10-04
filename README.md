@@ -43,10 +43,12 @@ unknown POSIX class such as `[[:unknown:]]` remains invalid.
 
 `*` and `?` do not cross separators. A run of two or more stars occupying a complete path component is recursive: `**/x` matches `x` and any descendant `x`; `a/**/b` permits zero or more intervening directories; `a/**` matches contents below `a`. Other star runs behave like `*`. Compilation rejects invalid standalone globs. Matching uses bounded dynamic programming rather than recursive backtracking; memory is linear in path length. The matcher reuses two Boolean rows across all
 pattern tokens, so temporary row allocation no longer grows with pattern length.
-Work-budget charging is unchanged, including character-class ranges; matching
-remains O(pattern tokens × path bytes) rather than a multipattern automaton.
+Work-budget charging is unchanged, including character-class ranges; wildcard
+matching remains O(pattern tokens × path bytes) rather than a multipattern automaton.
 Empty patterns compare directly with an empty path without allocating matching
 rows, including when a `GlobSet` contains many empty patterns.
+Patterns containing only literals, including escaped metacharacters, compare
+bytes directly without matching rows after the same work-budget preflight.
 
 A recursive star run followed by an escaped separator also crosses directories,
 but retains that literal separator: `**\/x` matches `a/b/x`, and requires at least
