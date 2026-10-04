@@ -97,16 +97,17 @@ fn parse_class(pattern: string, start: isize) -> Result[(Token, isize), Error] {
         if index + 1 < pattern.byte_len() && pattern.byte_get(index) == b'['
             && pattern.byte_get(index + 1) == b':' {
             let mut end = index + 2;
-            while end + 1 < pattern.byte_len()
-                && !(pattern.byte_get(end) == b':' && pattern.byte_get(end + 1) == b']') {
+            while end < pattern.byte_len() && pattern.byte_get(end) != b']' {
                 end += 1;
             }
-            if end + 1 >= pattern.byte_len() {
+            if end == pattern.byte_len() {
                 return Result::Err(failure(ErrorKind::InvalidPattern, "unterminated POSIX class"))
             }
-            named_class(pattern.byte_slice(index + 2, end), ranges)?;
-            index = end + 2;
-            continue;
+            if end > index + 2 && pattern.byte_get(end - 1) == b':' {
+                named_class(pattern.byte_slice(index + 2, end - 1), ranges)?;
+                index = end + 1;
+                continue;
+            }
         }
         let (low, next) = class_byte(pattern, index)?;
         index = next;
@@ -175,8 +176,10 @@ impl Glob {
                 }
                 let recursive = end - index >= 2
                     && (index == 0 || pattern.byte_get(index - 1) == b'/')
-                    && (end == pattern.byte_len() || pattern.byte_get(end) == b'/');
-                if recursive && end < pattern.byte_len() {
+                    && (end == pattern.byte_len() || pattern.byte_get(end) == b'/'
+                        || end + 1 < pattern.byte_len() && pattern.byte_get(end) == b'\\'
+                            && pattern.byte_get(end + 1) == b'/');
+                if recursive && end < pattern.byte_len() && pattern.byte_get(end) == b'/' {
                     tokens.push(Token::RecursivePrefix);
                     end += 1;
                 } else if recursive {

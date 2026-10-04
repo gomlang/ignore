@@ -37,11 +37,18 @@ Bracket ranges retain Git's literal-start behavior: `[z-a]` matches `z`, and
 `[!z-a]` excludes `z`. An initial literal `]` may also start a range, so `[]-a]`
 matches the bytes from `]` through `a`. Ascending ranges retain their usual
 inclusive meaning.
+An incomplete POSIX marker inside an otherwise closed class falls back to
+ordinary characters, as in Git: `[[:digit]` matches `d` but not `5`. A complete
+unknown POSIX class such as `[[:unknown:]]` remains invalid.
 
 `*` and `?` do not cross separators. A run of two or more stars occupying a complete path component is recursive: `**/x` matches `x` and any descendant `x`; `a/**/b` permits zero or more intervening directories; `a/**` matches contents below `a`. Other star runs behave like `*`. Compilation rejects invalid standalone globs. Matching uses bounded dynamic programming rather than recursive backtracking; memory is linear in path length. The matcher reuses two Boolean rows across all
 pattern tokens, so temporary row allocation no longer grows with pattern length.
 Work-budget charging is unchanged, including character-class ranges; matching
 remains O(pattern tokens × path bytes) rather than a multipattern automaton.
+
+A recursive star run followed by an escaped separator also crosses directories,
+but retains that literal separator: `**\/x` matches `a/b/x`, and requires at least
+one slash, while `**/x` also matches `x`.
 
 `Gitignore::new()` creates an immutable ruleset. `with_source(base, source_name, text)` returns a new ruleset with a `.gitignore` source rooted at a normalized relative directory. `with_excludes(source_name, text)` adds explicitly provided low-priority global or repository excludes. Deeper `.gitignore` sources override shallower ones regardless of insertion order; later rules at the same depth win. Multiple excludes sources follow their insertion order. `with_options(limits, ascii_case_insensitive)` creates a configured ruleset.
 

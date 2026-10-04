@@ -1,0 +1,54 @@
+package tests;
+
+use ecosystem::ignore;
+use std::testing;
+
+#[test]
+fn escaped_separator_keeps_globstar_recursive_without_omitting_the_separator() -> () {
+    for (pattern, path, expected) in Vec::from_array(
+        [
+            ("**\\/b", "b", false),
+            ("**\\/b", "a/b", true),
+            ("**\\/b", "x/a/b", true),
+            ("a/**\\/b", "a/b", false),
+            ("a/**\\/b", "a/x/b", true),
+            ("a/**\\/b", "a/x/y/b", true),
+            ("a/**\\/b", "x/a/b", false),
+            ("a/**/b", "a/b", true),
+            ("a\\/**/b", "a/b", true),
+            ("a\\/**/b", "a/x/y/b", true),
+            ("*\\/b", "a/b", true),
+            ("*\\/b", "a/x/b", false),
+        ],
+    ) {
+        testing::assert_eq(glob(pattern, path), expected);
+        testing::assert_eq(ignored(rules(pattern + "\n"), path, false), expected);
+    }
+}
+
+#[test]
+fn incomplete_posix_class_syntax_falls_back_to_literal_bracket_members() -> () {
+    for (pattern, path, expected) in Vec::from_array(
+        [
+            ("[[:digit]", "d", true),
+            ("[[:digit]", ":", true),
+            ("[[:digit]", "[", true),
+            ("[[:digit]", "5", false),
+            ("[[:digit]", "x", false),
+            ("[[:digit]]", "d]", true),
+            ("[[:digit]]", ":]", true),
+            ("[[:digit]]", "d", false),
+            ("[[:foo]bar:]]", "fbar:]]", true),
+            ("[[:]]", "[]", true),
+            ("[[:]]", ":]", true),
+            ("[[:]]", "]", false),
+        ],
+    ) {
+        testing::assert_eq(glob(pattern, path), expected);
+        testing::assert_eq(ignored(rules(pattern + "\n"), path, false), expected);
+    }
+    for malformed in Vec::from_array(["[[:digit:]", "[[:unknown:]]"]) {
+        testing::assert_err(ignore::Glob::new(malformed));
+        testing::assert(!ignored(rules(malformed + "\n"), "d", false));
+    }
+}
