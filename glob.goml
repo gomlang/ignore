@@ -91,11 +91,9 @@ fn parse_class(pattern: string, start: isize) -> Result[(Token, isize), Error] {
         index += 1;
     }
     let ranges: Vec[(byte, byte)] = Vec::new();
-    if index < pattern.byte_len() && pattern.byte_get(index) == b']' {
-        ranges.push((b']', b']'));
-        index += 1;
-    }
-    while index < pattern.byte_len() && pattern.byte_get(index) != b']' {
+    let mut first = true;
+    while index < pattern.byte_len() && (pattern.byte_get(index) != b']' || first) {
+        first = false;
         if index + 1 < pattern.byte_len() && pattern.byte_get(index) == b'['
             && pattern.byte_get(index + 1) == b':' {
             let mut end = index + 2;
@@ -115,7 +113,16 @@ fn parse_class(pattern: string, start: isize) -> Result[(Token, isize), Error] {
         if index + 1 < pattern.byte_len() && pattern.byte_get(index) == b'-'
             && pattern.byte_get(index + 1) != b']' {
             let (high, next) = class_byte(pattern, index + 1)?;
-            ranges.push((low, high));
+            ranges.push(
+                (
+                    low,
+                    if high < low {
+                        low
+                    } else {
+                        high
+                    },
+                ),
+            );
             index = next;
         } else {
             ranges.push((low, low));

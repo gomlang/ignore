@@ -1,0 +1,49 @@
+package tests;
+
+use ecosystem::ignore;
+use std::testing;
+
+// Expected membership was checked with git check-ignore --no-index and Git's
+// bracket parsing in https://github.com/git/git/blob/master/wildmatch.c.
+
+fn assert_class_members(pattern: string, members: string, negated: bool) -> () {
+    let ruleset = rules(pattern + "\n");
+    for value in Vec::from_array(["-", "!", "0", "A", "Z", "[", "]", "^", "_", "`", "a", "b", "z"]) {
+        let expected = members.contains(value) != negated;
+        testing::assert_eq(glob(pattern, value), expected);
+        testing::assert_eq(ignored(ruleset, value, false), expected);
+        testing::assert_eq(ignored(ruleset, "parent/" + value, false), expected);
+    }
+}
+
+#[test]
+fn descending_class_ranges_keep_their_initial_literal() -> () {
+    assert_class_members("[z-a]", "z", false);
+    assert_class_members("[!z-a]", "z", true);
+    assert_class_members("[a--]", "a", false);
+    let folded = testing::expect_ok(
+        ignore::Glob::with_options("[Z-A]", ignore::Limits::standard(), true),
+        "folded descending range",
+    );
+    testing::assert(testing::expect_ok(folded.is_match("z"), "lowercase initial literal"));
+    testing::assert(!testing::expect_ok(folded.is_match("a"), "range end remains absent"));
+}
+
+#[test]
+fn initial_closing_bracket_can_start_a_character_range() -> () {
+    assert_class_members("[]-a]", "]^_`a", false);
+    assert_class_members("[!]-a]", "]^_`a", true);
+    assert_class_members("[\\]-a]", "]^_`a", false);
+    assert_class_members("[]-]", "]-", false);
+    for pattern in Vec::from_array(["[z-a]", "[]-a]"]) {
+        let value = testing::expect_ok(
+            ignore::Glob::with_options(
+                pattern,
+                ignore::Limits { max_match_steps: 4, ..ignore::Limits::standard() },
+                false,
+            ),
+            "one-range work budget",
+        );
+        testing::assert_ok(value.is_match("z"));
+    }
+}
