@@ -160,10 +160,20 @@ fn directory_names(
     maximum: isize,
     ancestors: FrozenVec[string],
     ctx: context::Context,
+    follow: bool,
 ) -> Result[(Vec[string], string), Error] {
-    let file = fd::open(directory, fd::O_RDONLY | fd::O_DIRECTORY, 0).map_err(
-        |error| io_failure(directory, error),
-    )?;
+    let flags = fd::O_RDONLY | fd::O_DIRECTORY
+        | if follow {
+            0
+        } else {
+            fd::O_NOFOLLOW
+        };
+    let opened_path = if follow {
+        directory
+    } else {
+        root_metadata_path(directory)
+    };
+    let file = fd::open(opened_path, flags, 0).map_err(|error| io_failure(directory, error))?;
     defer {
         let _ = file.close();
     };
@@ -234,6 +244,17 @@ fn root_metadata_path(root: string) -> string {
             return root.byte_slice(0, end)
         }
     }
+}
+
+fn walk_metadata(file_path: string, root: bool) -> Result[fs::Metadata, Error] {
+    let metadata = fs::symlink_metadata(file_path).map_err(|error| fs_failure(file_path, error))?;
+    if root {
+        let lookup = root_metadata_path(file_path);
+        if lookup != file_path {
+            return fs::symlink_metadata(lookup).map_err(|error| fs_failure(file_path, error))
+        }
+    }
+    Result::Ok(metadata)
 }
 
 fn metadata_line(text: string) -> string {
@@ -377,6 +398,12 @@ impl Walker {
     }
 
     fn descend(self: Walker, work: Work, ctx: context::Context) -> Result[(), Error] {
+        // A directory can become a link between its yield and this descent.
+        // Recheck before reading ignore sources through that path.
+        if self.options.symlinks == Symlinks::Skip
+            && walk_metadata(work.path, work.depth == 0)?.file_type().is_symlink() {
+            return Result::Ok(())
+        }
         let mut rules = work.rules;
         if self.options.gitignore {
             if work.depth == 0 {
@@ -397,7 +424,13 @@ impl Walker {
         } else {
             self.options.max_entries_per_directory
         };
-        let (names, identity) = directory_names(work.path, maximum, work.ancestors, ctx)?;
+        let (names, identity) = directory_names(
+            work.path,
+            maximum,
+            work.ancestors,
+            ctx,
+            self.options.symlinks == Symlinks::Follow,
+        )?;
         let ancestors = work.ancestors.to_vec();
         ancestors.push(identity);
         let ancestors = ancestors.freeze();
@@ -469,22 +502,9 @@ impl Walker {
                     ),
                 )
             }
-            let metadata = match fs::symlink_metadata(work.path) {
+            let metadata = match walk_metadata(work.path, work.depth == 0) {
                 Ok(value) => value,
-                Err(error) => return Option::Some(Result::Err(fs_failure(work.path, error))),
-            };
-            let metadata = if work.depth == 0 {
-                let lookup = root_metadata_path(work.path);
-                if lookup != work.path {
-                    match fs::symlink_metadata(lookup) {
-                        Ok(value) => value,
-                        Err(error) => return Option::Some(Result::Err(fs_failure(work.path, error))),
-                    }
-                } else {
-                    metadata
-                }
-            } else {
-                metadata
+                Err(error) => return Option::Some(Result::Err(error)),
             };
             let link = metadata.file_type().is_symlink();
             let metadata = if link && self.options.symlinks == Symlinks::Follow {

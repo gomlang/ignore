@@ -83,6 +83,12 @@ Set `gitignore: false` to disable automatic Git metadata and ignore-source loadi
 
 The default `Symlinks::Skip` emits links without following them. `Symlinks::Follow` uses target types and follows directory links; device/inode identities from opened directories detect ancestor cycles and return `ErrorKind::Cycle`. Separate links to the same non-ancestor directory are each traversed. Following links can leave the scan root. This is ordinary filesystem traversal, not a filesystem sandbox or snapshot: concurrent renames and mount changes can alter results. Symlink ignore files and symlink `.git` markers are not loaded.
 
+Before expanding a yielded directory, `Symlinks::Skip` checks the final node
+again. A directory replaced by a symlink between `next` calls is skipped before
+its ignore sources or children are read. Directory opens also refuse a final
+symlink in this mode. This does not make traversal a snapshot or prevent races
+involving ancestor paths.
+
 Ignore files are read in bounded chunks with `O_NOFOLLOW` and `O_NONBLOCK`; nonregular sources are rejected. Directory entries are fetched in bounded kernel batches, then accumulated up to the configured bound and sorted. Descriptors are closed before every `next` return, including errors and cancellation. No descriptor survives abandonment of the iterator. Filenames and source text must be valid UTF-8; undecodable names report an error. An I/O or source error skips the affected entry or subtree and permits later siblings; callers requiring complete results should propagate the first error. Cancellation emits one cancellation error and permanently ends iteration. Cancellation is checked between filesystem calls and cannot interrupt an already blocked kernel call.
 
 `Walker` copies share one cursor and must be used sequentially, including its callbacks. Immutable `Glob`, `GlobSet`, `Gitignore`, `Rule`, and `Match` values can be shared across tasks. Use separate walkers for independent scans.

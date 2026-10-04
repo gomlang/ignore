@@ -1,0 +1,137 @@
+package tests;
+
+use ecosystem::ignore;
+use std::context;
+use std::fs;
+use std::testing;
+
+#[test]
+fn pending_directory_replacement_obeys_the_symlink_policy() -> () {
+    for follow in[false, true] {
+        let root = temporary();
+        let target = temporary();
+        defer {
+            let _ = root.close();
+            let _ = target.close();
+        };
+        write(root.path(), "a/original", "");
+        write(root.path(), "z", "");
+        write(target.path(), "outside", "");
+        let walker = testing::expect_ok(
+            ignore::Walker::new(
+                root.path(),
+                ignore::WalkOptions {
+                    gitignore: false,
+                    symlinks: if follow {
+                        ignore::Symlinks::Follow
+                    } else {
+                        ignore::Symlinks::Skip
+                    },
+                    ..ignore::WalkOptions::standard(),
+                },
+            ),
+            "walker",
+        );
+        defer {
+            walker.close();
+        };
+        let ctx = context::Context::background();
+        testing::assert_eq(
+            testing::expect_ok(testing::expect_some(walker.next(ctx), "root"), "root").relative_path(),
+            "",
+        );
+        testing::assert_eq(
+            testing::expect_ok(testing::expect_some(walker.next(ctx), "a"), "a").relative_path(),
+            "a",
+        );
+        testing::assert_ok(fs::rename(root.path() + "/a", root.path() + "/old"));
+        testing::assert_ok(fs::symbolic_link(target.path(), root.path() + "/a"));
+        let remaining: Vec[string] = Vec::new();
+        while let Some(value) = walker.next(ctx) {
+            remaining.push(testing::expect_ok(value, "remaining entry").relative_path());
+        }
+        testing::assert(
+            remaining
+                == if follow {
+                    Vec::from_array(["a/outside", "z"])
+                } else {
+                    Vec::from_array(["z"])
+                },
+        );
+    }
+}
+
+#[test]
+fn pending_links_skip_ignore_sources_and_preserve_root_suffix_checks() -> () {
+    let ctx = context::Context::background();
+    for suffix in["", "/", "/.", "///./"] {
+        let parent = temporary();
+        let target = temporary();
+        defer {
+            let _ = parent.close();
+            let _ = target.close();
+        };
+        testing::assert_ok(fs::create_dir(parent.path() + "/scan"));
+        // Loading this target's ignore source would fail.
+        testing::assert_ok(fs::create_dir(target.path() + "/.gitignore"));
+        write(target.path(), "outside", "");
+        let walker = testing::expect_ok(
+            ignore::Walker::new(parent.path() + "/scan" + suffix, ignore::WalkOptions::standard()),
+            "root walker",
+        );
+        defer {
+            walker.close();
+        };
+        testing::assert_ok(testing::expect_some(walker.next(ctx), "root"));
+        testing::assert_ok(fs::rename(parent.path() + "/scan", parent.path() + "/old"));
+        testing::assert_ok(fs::symbolic_link(target.path(), parent.path() + "/scan"));
+        testing::assert_none(walker.next(ctx));
+        testing::assert_none(walker.next(ctx));
+    }
+    for regular in[false, true] {
+        let parent = temporary();
+        defer {
+            let _ = parent.close();
+        };
+        testing::assert_ok(fs::create_dir(parent.path() + "/scan"));
+        let walker = testing::expect_ok(
+            ignore::Walker::new(parent.path() + "/scan/.", ignore::WalkOptions::standard()),
+            "root suffix walker",
+        );
+        defer {
+            walker.close();
+        };
+        testing::assert_ok(testing::expect_some(walker.next(ctx), "root"));
+        testing::assert_ok(fs::rename(parent.path() + "/scan", parent.path() + "/old"));
+        if regular {
+            write(parent.path(), "scan", "");
+        }
+        testing::assert_err(testing::expect_some(walker.next(ctx), "invalid root suffix"));
+        testing::assert_none(walker.next(ctx));
+    }
+    let parent = temporary();
+    let target = temporary();
+    defer {
+        let _ = parent.close();
+        let _ = target.close();
+    };
+    write(parent.path(), "a/original", "");
+    write(parent.path(), "z", "");
+    testing::assert_ok(fs::create_dir(target.path() + "/.gitignore"));
+    let walker = testing::expect_ok(
+        ignore::Walker::new(parent.path(), ignore::WalkOptions::standard()),
+        "child source walker",
+    );
+    defer {
+        walker.close();
+    };
+    testing::assert_ok(testing::expect_some(walker.next(ctx), "root"));
+    testing::assert_ok(testing::expect_some(walker.next(ctx), "a"));
+    testing::assert_ok(fs::rename(parent.path() + "/a", parent.path() + "/old"));
+    testing::assert_ok(fs::symbolic_link(target.path(), parent.path() + "/a"));
+    testing::assert_eq(
+        testing::expect_ok(testing::expect_some(walker.next(ctx), "sibling"), "skip sources").relative_path(),
+        "z",
+    );
+    testing::assert_none(walker.next(ctx));
+}
