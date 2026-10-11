@@ -107,7 +107,7 @@ then exhaustion, including when the callback excludes the current entry.
 From the repository root:
 
 ```sh
-(cd ../verification && just ecosystem-test ignore)
+(cd ../workflows && just ecosystem-test ignore)
 ```
 
 The suite covers matching, rule explanations and precedence, path validation, aliases, worktree metadata, symlink loops, malformed or oversized sources, deterministic traversal, cancellation, resource bounds, immutable concurrent matching, and bounded parallel callbacks. The example exercises the exported API; the ecosystem verifier repeats its checks using an isolated registry snapshot. Native example tests compare 200 rule hierarchies and 9,400 path queries with retained expected results from isolated real Git repositories, including explicit trailing-slash queries and directory traversal. [Fixture provenance](examples/basic/tests/data/README.md) records the Git command and seed. The native verifier runs library and example tests under Go's race detector.
@@ -116,12 +116,12 @@ Git semantics are based on the [Gitignore documentation](https://git-scm.com/doc
 
 ## Development and examples
 
-Requires the [current GoML toolchain](https://github.com/gomlang/verification/blob/main/ci/toolchain.json) with unversioned registry support. The `examples/basic/` example shares the root manifest; test-only helpers are declared in `[dev-dependencies]`. From the library root, run:
+Requires the [current GoML toolchain](https://github.com/gomlang/workflows/blob/main/ci/toolchain.json) with unversioned registry support. The `examples/basic/` example shares the root manifest; test-only helpers are declared in `[dev-dependencies]`. From the library root, run:
 
 ```sh
 goml run --example basic
 goml test
-(cd ../verification && just ecosystem-test ignore)
+(cd ../workflows && just ecosystem-test ignore)
 ```
 
-`goml test` builds the example and runs its tests. `(cd ../verification && just ecosystem-test ignore)` runs the library-specific smoke and compatibility checks.
+`goml test` builds the example and runs its tests. `(cd ../workflows && just ecosystem-test ignore)` runs the library-specific smoke and compatibility checks.

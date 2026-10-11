@@ -5,4 +5,4 @@ path = "ecosystem::ignore"
 "ecosystem::tempfile" = true
 
 [dev-dependencies]
-"ecosystem::verification" = true
+"ecosystem::testkit" = true
