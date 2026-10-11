@@ -2,7 +2,7 @@
 
 `ecosystem::ignore` is a GoML implementation of byte-oriented glob matching, hierarchical Gitignore rules, and bounded filesystem traversal. The matcher and traversal policy are implemented in GoML. Filesystem access uses the standard library's Linux amd64 descriptor APIs. No external matching library or Git subprocess is needed at runtime.
 
-Add `"ecosystem::ignore" = "0.1.0"` under your module's `[dependencies]`. `ecosystem::tempfile` is used by the black-box filesystem tests.
+Add `"ecosystem::ignore" = true` under your module's `[dependencies]`. `ecosystem::tempfile` is used by the black-box filesystem tests.
 
 ```goml
 use ecosystem::ignore;
@@ -110,18 +110,18 @@ From the repository root:
 (cd ../verification && just ecosystem-test ignore)
 ```
 
-The suite covers matching, rule explanations and precedence, path validation, aliases, worktree metadata, symlink loops, malformed or oversized sources, deterministic traversal, cancellation, resource bounds, immutable concurrent matching, and bounded parallel callbacks. The example exercises the exported API; `goml verify` repeats its checks across the downstream dependency boundary. Native example tests compare 200 rule hierarchies and 9,400 path queries with retained expected results from isolated real Git repositories, including explicit trailing-slash queries and directory traversal. [Fixture provenance](examples/basic/tests/data/README.md) records the Git command and seed. The native verifier runs library and example tests under Go's race detector. CI integration is intentionally left to the parent project.
+The suite covers matching, rule explanations and precedence, path validation, aliases, worktree metadata, symlink loops, malformed or oversized sources, deterministic traversal, cancellation, resource bounds, immutable concurrent matching, and bounded parallel callbacks. The example exercises the exported API; the ecosystem verifier repeats its checks using an isolated registry snapshot. Native example tests compare 200 rule hierarchies and 9,400 path queries with retained expected results from isolated real Git repositories, including explicit trailing-slash queries and directory traversal. [Fixture provenance](examples/basic/tests/data/README.md) records the Git command and seed. The native verifier runs library and example tests under Go's race detector.
 
 Git semantics are based on the [Gitignore documentation](https://git-scm.com/docs/gitignore), [repository layout](https://git-scm.com/docs/gitrepository-layout), and [git check-ignore](https://git-scm.com/docs/git-check-ignore). The JSON example's directory requests append a slash to reproduce the exact paths used by the Git oracle.
 
 ## Development and examples
 
-Requires GoML 0.1.56 or newer. The `examples/basic/` example shares the root manifest; test-only helpers are declared in `[dev-dependencies]`. From the library root, run:
+Requires the [current GoML toolchain](https://github.com/gomlang/verification/blob/main/ci/toolchain.json) with unversioned registry support. The `examples/basic/` example shares the root manifest; test-only helpers are declared in `[dev-dependencies]`. From the library root, run:
 
 ```sh
 goml run --example basic
 goml test
-goml verify --timeout 300s
+(cd ../verification && just ecosystem-test ignore)
 ```
 
-`goml test` builds the example and runs its tests. `goml verify` repeats the example checks as an independent module against an isolated registry snapshot. `(cd ../verification && just ecosystem-test ignore)` also retains the library-specific smoke and compatibility checks.
+`goml test` builds the example and runs its tests. `(cd ../verification && just ecosystem-test ignore)` runs the library-specific smoke and compatibility checks.
